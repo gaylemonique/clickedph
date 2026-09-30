@@ -77,3 +77,36 @@ test("dithering turns a dark midtone into printable detail instead of a solid bl
   assert.ok(dithered.includes(255));
 });
 
+test("keeps a dark face on a bright receipt from printing as a black mass", () => {
+  const width = 32;
+  const height = 32;
+  const receipt = Buffer.alloc(width * height, 205);
+
+  for (let index = 0; index < receipt.length; index += 7) receipt[index] = 255;
+  for (let y = 6; y < 26; y += 1) {
+    for (let x = 8; x < 24; x += 1) receipt[y * width + x] = 118;
+  }
+  for (let y = 10; y < 16; y += 1) {
+    for (let x = 11; x < 21; x += 1) receipt[y * width + x] = 70;
+  }
+
+  const corrected = autoToneGrayscale(receipt);
+  const dithered = ditherGrayscale(corrected, width, height);
+  let blackFacePixels = 0;
+  let facePixels = 0;
+  let correctedFaceTotal = 0;
+  for (let y = 6; y < 26; y += 1) {
+    for (let x = 8; x < 24; x += 1) {
+      const index = y * width + x;
+      correctedFaceTotal += corrected[index];
+      if (dithered[index] === 0) blackFacePixels += 1;
+      facePixels += 1;
+    }
+  }
+
+  const blackRatio = blackFacePixels / facePixels;
+  const correctedAverage = correctedFaceTotal / facePixels;
+  assert.ok(correctedAverage > 135, `expected lifted face tones, received average ${correctedAverage}`);
+  assert.ok(blackRatio < 0.5, `expected printable face detail below 50% black, received ${blackRatio}`);
+});
+

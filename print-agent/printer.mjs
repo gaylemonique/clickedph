@@ -8,7 +8,7 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
-export const PRINT_TONE_PROFILE = "baseline-paper";
+export const PRINT_TONE_PROFILE = "face-detail-paper";
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -139,34 +139,14 @@ export function buildEscPosRaster(grayscale, width, height) {
 }
 
 export function autoToneGrayscale(grayscale) {
-  const histogram = new Uint32Array(256);
-  let usablePixels = 0;
-  for (const value of grayscale) {
-    if (value > 5 && value < 250) {
-      histogram[value] += 1;
-      usablePixels += 1;
-    }
-  }
-  if (usablePixels === 0) return Buffer.from(grayscale);
-
-  const midpoint = Math.ceil(usablePixels / 2);
-  let running = 0;
-  let median = 128;
-  for (let value = 6; value < 250; value += 1) {
-    running += histogram[value];
-    if (running >= midpoint) {
-      median = value;
-      break;
-    }
-  }
-
-  const targetMedian = 168;
-  const rawGamma = Math.log(targetMedian / 255) / Math.log(Math.max(median, 8) / 255);
-  const gamma = Math.min(1.12, Math.max(0.45, rawGamma));
+  const blackPoint = 24;
+  const paperPoint = 230;
+  const shadowLift = 0.58;
   return Buffer.from(Uint8Array.from(grayscale, (value) => {
-    if (value <= 4) return 0;
-    if (value >= 250) return 255;
-    return Math.round(255 * Math.pow(value / 255, gamma));
+    if (value <= blackPoint) return Math.max(0, Math.round(value * 0.35));
+    if (value >= paperPoint) return 255;
+    const normalized = (value - blackPoint) / (paperPoint - blackPoint);
+    return Math.round(45 + 210 * Math.pow(normalized, shadowLift));
   }));
 }
 
