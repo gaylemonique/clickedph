@@ -104,27 +104,37 @@ function analyzeLighting(video: HTMLVideoElement): LightingStatus {
 
   context.drawImage(video, 0, 0, width, height);
   const { data } = context.getImageData(0, 0, width, height);
-  const face = readRegionAverage(data, width, 32, 16, 64, 52);
+  const upperFace = readRegionAverage(data, width, 31, 16, 65, 43);
+  const lowerFace = readRegionAverage(data, width, 29, 28, 67, 61);
+  const face = Math.min(upperFace, lowerFace);
   const background = (
     readRegionAverage(data, width, 0, 0, 22, height)
     + readRegionAverage(data, width, 74, 0, width, height)
     + readRegionAverage(data, width, 22, 0, 74, 14)
   ) / 3;
 
-  if (face < 92) {
-    return {
-      state: "dim",
-      face: Math.round(face),
-      background: Math.round(background),
-      message: "Add front light or move closer.",
-    };
-  }
-  if (background - face > 48) {
+  if (background - face > 38 && background > 178) {
     return {
       state: "backlit",
       face: Math.round(face),
       background: Math.round(background),
-      message: "Turn away from the bright wall or light your face.",
+      message: "Face will print dark. Face the light or move away from the bright wall.",
+    };
+  }
+  if (face < 132) {
+    return {
+      state: "dim",
+      face: Math.round(face),
+      background: Math.round(background),
+      message: "Face needs more front light before printing.",
+    };
+  }
+  if (background - face > 28 && face < 155) {
+    return {
+      state: "backlit",
+      face: Math.round(face),
+      background: Math.round(background),
+      message: "Background is brighter than your face. Add light in front.",
     };
   }
   return {
@@ -573,6 +583,9 @@ export default function Home() {
           <div className="viewfinder-wrap">
             <div className={`viewfinder ${flash ? "is-flashing" : ""}`}>
               <video ref={videoRef} muted playsInline aria-label="Live camera preview" />
+              <div className="face-guide" aria-hidden="true">
+                <span>Keep face here</span>
+              </div>
               <span className="corner corner-tl" /><span className="corner corner-tr" />
               <span className="corner corner-bl" /><span className="corner corner-br" />
               {cameraPhase === "loading" && (
