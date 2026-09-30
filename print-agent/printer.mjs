@@ -8,6 +8,7 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
+export const PRINT_TONE_PROFILE = "photo-safe-v2";
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -159,9 +160,9 @@ export function autoToneGrayscale(grayscale) {
     }
   }
 
-  const targetMedian = 198;
+  const targetMedian = 218;
   const rawGamma = Math.log(targetMedian / 255) / Math.log(Math.max(median, 8) / 255);
-  const gamma = Math.min(1.05, Math.max(0.32, rawGamma));
+  const gamma = Math.min(0.28, Math.max(0.18, rawGamma));
   return Buffer.from(Uint8Array.from(grayscale, (value) => {
     if (value <= 4) return 0;
     if (value >= 250) return 255;

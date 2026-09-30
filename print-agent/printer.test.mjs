@@ -114,3 +114,35 @@ test("thermal tone mapping keeps face midtones from printing mostly black", () =
 
   assert.ok(faceInkRatio < 0.3, `expected face midtones to stay printable, received ${faceInkRatio}`);
 });
+
+test("thermal tone mapping protects faces against a bright wall background", () => {
+  const width = 64;
+  const height = 76;
+  const grayscale = [];
+  const faceArea = [];
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = (x - 32) / 24;
+      const dy = (y - 34) / 30;
+      const radius = Math.sqrt(dx * dx + dy * dy);
+      let value = 232;
+      const isFaceArea = radius < 0.82 && y > 15 && y < 62;
+
+      if (isFaceArea) value = 92 + Math.round(44 * (1 - Math.min(radius, 0.82) / 0.82));
+      if (y < 31 && Math.abs(x - 32) < 21) value = 38;
+      if (y > 34 && y < 40 && x > 20 && x < 44) value = 76;
+
+      grayscale.push(value);
+      faceArea.push(isFaceArea);
+    }
+  }
+
+  const corrected = autoToneGrayscale(Buffer.from(grayscale));
+  const dithered = ditherGrayscale(corrected, width, height);
+  const faceInkRatio = dithered.reduce((blackPixels, value, index) => {
+    return blackPixels + (faceArea[index] && value === 0 ? 1 : 0);
+  }, 0) / faceArea.filter(Boolean).length;
+
+  assert.ok(faceInkRatio < 0.32, `expected bright-background face ink to stay controlled, received ${faceInkRatio}`);
+});

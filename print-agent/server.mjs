@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { configureLocalAgentAccess } from "./http-access.mjs";
-import { discoverPrinter, pngToEscPos, writeDirectUsb } from "./printer.mjs";
+import { PRINT_TONE_PROFILE, discoverPrinter, pngToEscPos, writeDirectUsb } from "./printer.mjs";
 
 const port = Number(process.env.PRINT_AGENT_PORT ?? 3421);
 const jobDirectory = path.resolve(process.env.PRINT_JOB_DIRECTORY ?? "print-agent/jobs");
@@ -29,7 +29,7 @@ function runPrintCommand(filePath) {
 
 app.get("/health", async (_request, response) => {
   const printer = await discoverPrinter();
-  response.json({ ok: true, agent: "online", printer, commandOverride: Boolean(printCommand) });
+  response.json({ ok: true, agent: "online", toneProfile: PRINT_TONE_PROFILE, printer, commandOverride: Boolean(printCommand) });
 });
 
 app.get("/printers", async (_request, response) => {
@@ -87,6 +87,7 @@ app.post("/print", async (request, response) => {
 
 app.listen(port, "127.0.0.1", () => {
   console.log(`Clicked! print agent listening at http://127.0.0.1:${port}`);
+  console.log(`Thermal tone profile: ${PRINT_TONE_PROFILE}.`);
   void discoverPrinter().then((printer) => {
     if (printer.ready) console.log(`Auto-detected ${printer.name} (${printer.mode}).`);
     else console.log("Waiting for a POS-58 / JK-5802H USB printer. Hot-plug detection is active.");
