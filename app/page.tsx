@@ -93,6 +93,31 @@ function readRegionAverage(data: Uint8ClampedArray, width: number, xStart: numbe
   return count === 0 ? 0 : total / count;
 }
 
+function readRegionStats(data: Uint8ClampedArray, width: number, xStart: number, yStart: number, xEnd: number, yEnd: number) {
+  let total = 0;
+  let squaredTotal = 0;
+  let darkPixels = 0;
+  let count = 0;
+  for (let y = yStart; y < yEnd; y += 1) {
+    for (let x = xStart; x < xEnd; x += 1) {
+      const index = (y * width + x) * 4;
+      const value = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
+      total += value;
+      squaredTotal += value * value;
+      if (value < 176) darkPixels += 1;
+      count += 1;
+    }
+  }
+  if (count === 0) return { average: 0, darkRatio: 0, detail: 0 };
+  const average = total / count;
+  const variance = Math.max(0, squaredTotal / count - average * average);
+  return {
+    average,
+    darkRatio: darkPixels / count,
+    detail: Math.sqrt(variance),
+  };
+}
+
 function analyzeLighting(video: HTMLVideoElement): LightingStatus {
   const width = 96;
   const height = 72;
@@ -104,15 +129,24 @@ function analyzeLighting(video: HTMLVideoElement): LightingStatus {
 
   context.drawImage(video, 0, 0, width, height);
   const { data } = context.getImageData(0, 0, width, height);
-  const upperFace = readRegionAverage(data, width, 31, 16, 65, 43);
-  const lowerFace = readRegionAverage(data, width, 29, 28, 67, 61);
-  const face = Math.min(upperFace, lowerFace);
+  const upperFace = readRegionStats(data, width, 31, 16, 65, 43);
+  const lowerFace = readRegionStats(data, width, 29, 28, 67, 61);
+  const subject = readRegionStats(data, width, 24, 12, 72, 64);
+  const face = Math.min(upperFace.average, lowerFace.average);
   const background = (
     readRegionAverage(data, width, 0, 0, 22, height)
     + readRegionAverage(data, width, 74, 0, width, height)
     + readRegionAverage(data, width, 22, 0, 74, 14)
   ) / 3;
 
+  if (subject.darkRatio < 0.08 && subject.detail < 18) {
+    return {
+      state: "dim",
+      face: Math.round(subject.average),
+      background: Math.round(background),
+      message: "Step closer or center yourself. The camera is reading mostly background.",
+    };
+  }
   if (background - face > 38 && background > 178) {
     return {
       state: "backlit",
@@ -583,9 +617,6 @@ export default function Home() {
           <div className="viewfinder-wrap">
             <div className={`viewfinder ${flash ? "is-flashing" : ""}`}>
               <video ref={videoRef} muted playsInline aria-label="Live camera preview" />
-              <div className="face-guide" aria-hidden="true">
-                <span>Keep face here</span>
-              </div>
               <span className="corner corner-tl" /><span className="corner corner-tr" />
               <span className="corner corner-bl" /><span className="corner corner-br" />
               {cameraPhase === "loading" && (
