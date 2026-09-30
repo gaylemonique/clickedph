@@ -76,3 +76,41 @@ test("dithering turns a dark midtone into printable detail instead of a solid bl
   assert.ok(dithered.includes(0));
   assert.ok(dithered.includes(255));
 });
+
+test("thermal tone mapping keeps face midtones from printing mostly black", () => {
+  const width = 64;
+  const height = 64;
+  const grayscale = [];
+  const faceMidtonePixels = [];
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = (x - 32) / 32;
+      const dy = (y - 32) / 32;
+      const radius = Math.sqrt(dx * dx + dy * dy);
+      let value = 235;
+      let isFaceMidtone = false;
+
+      if (radius < 0.78) {
+        value = 132 + Math.round(45 * (1 - radius / 0.78));
+        isFaceMidtone = true;
+      }
+      if (y < 24 && Math.abs(x - 32) < 22) {
+        value = 45;
+        isFaceMidtone = false;
+      }
+      if (y > 29 && y < 36 && x > 20 && x < 44) value = 105;
+
+      grayscale.push(value);
+      faceMidtonePixels.push(isFaceMidtone);
+    }
+  }
+
+  const corrected = autoToneGrayscale(Buffer.from(grayscale));
+  const dithered = ditherGrayscale(corrected, width, height);
+  const faceInkRatio = dithered.reduce((blackPixels, value, index) => {
+    return blackPixels + (faceMidtonePixels[index] && value === 0 ? 1 : 0);
+  }, 0) / faceMidtonePixels.filter(Boolean).length;
+
+  assert.ok(faceInkRatio < 0.3, `expected face midtones to stay printable, received ${faceInkRatio}`);
+});

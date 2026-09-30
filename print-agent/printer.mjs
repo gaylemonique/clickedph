@@ -159,9 +159,9 @@ export function autoToneGrayscale(grayscale) {
     }
   }
 
-  const targetMedian = 168;
+  const targetMedian = 198;
   const rawGamma = Math.log(targetMedian / 255) / Math.log(Math.max(median, 8) / 255);
-  const gamma = Math.min(1.12, Math.max(0.45, rawGamma));
+  const gamma = Math.min(1.05, Math.max(0.32, rawGamma));
   return Buffer.from(Uint8Array.from(grayscale, (value) => {
     if (value <= 4) return 0;
     if (value >= 250) return 255;
