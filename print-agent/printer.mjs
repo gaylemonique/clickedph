@@ -8,8 +8,7 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
-export const PRINT_TONE_PROFILE = "photo-safe-v4";
-const PAPER_WHITE_CUTOFF = 232;
+export const PRINT_TONE_PROFILE = "baseline-paper";
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -161,18 +160,14 @@ export function autoToneGrayscale(grayscale) {
     }
   }
 
-  const targetMedian = 218;
+  const targetMedian = 168;
   const rawGamma = Math.log(targetMedian / 255) / Math.log(Math.max(median, 8) / 255);
-  const gamma = Math.min(0.28, Math.max(0.18, rawGamma));
+  const gamma = Math.min(1.12, Math.max(0.45, rawGamma));
   return Buffer.from(Uint8Array.from(grayscale, (value) => {
     if (value <= 4) return 0;
     if (value >= 250) return 255;
     return Math.round(255 * Math.pow(value / 255, gamma));
   }));
-}
-
-export function preservePaperWhite(grayscale) {
-  return Buffer.from(Uint8Array.from(grayscale, (value) => value >= PAPER_WHITE_CUTOFF ? 255 : value));
 }
 
 export function ditherGrayscale(grayscale, width, height) {
@@ -184,15 +179,13 @@ export function ditherGrayscale(grayscale, width, height) {
       const oldValue = Math.max(0, Math.min(255, working[index]));
       const newValue = oldValue < 150 ? 0 : 255;
       output[index] = newValue;
-      const error = (oldValue - newValue) / 8;
-      if (x + 1 < width) working[index + 1] += error;
-      if (x + 2 < width) working[index + 2] += error;
+      const error = oldValue - newValue;
+      if (x + 1 < width) working[index + 1] += error * (7 / 16);
       if (y + 1 < height) {
-        if (x > 0) working[index + width - 1] += error;
-        working[index + width] += error;
-        if (x + 1 < width) working[index + width + 1] += error;
+        if (x > 0) working[index + width - 1] += error * (3 / 16);
+        working[index + width] += error * (5 / 16);
+        if (x + 1 < width) working[index + width + 1] += error * (1 / 16);
       }
-      if (y + 2 < height) working[index + width * 2] += error;
     }
   }
   return output;
@@ -205,7 +198,7 @@ export async function pngToEscPos(pngBuffer) {
     .grayscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  const corrected = preservePaperWhite(autoToneGrayscale(data));
+  const corrected = autoToneGrayscale(data);
   const dithered = ditherGrayscale(corrected, info.width, info.height);
   const raster = buildEscPosRaster(dithered, info.width, info.height);
   return Buffer.concat([

@@ -35,8 +35,8 @@ type EditSettings = {
 };
 
 const DEFAULT_SETTINGS: EditSettings = {
-  brightness: 115,
-  contrast: 105,
+  brightness: 108,
+  contrast: 108,
   spacing: 8,
   cropY: 50,
   border: true,
@@ -56,67 +56,6 @@ const loadImage = (source: string) =>
     image.onerror = reject;
     image.src = source;
   });
-
-const clamp = (value: number, minimum: number, maximum: number) =>
-  Math.min(maximum, Math.max(minimum, value));
-
-async function analyzePhotoTone(source: string) {
-  const image = await loadImage(source);
-  const canvas = document.createElement("canvas");
-  canvas.width = 120;
-  canvas.height = 90;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return null;
-
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-  const samples: number[] = [];
-
-  for (let index = 0; index < data.length; index += 4) {
-    const pixel = index / 4;
-    const x = pixel % canvas.width;
-    const y = Math.floor(pixel / canvas.width);
-    const centeredX = Math.abs((x + 0.5) / canvas.width - 0.5);
-    const centeredY = Math.abs((y + 0.5) / canvas.height - 0.5);
-    const isLikelySubject = centeredX < 0.34 && centeredY < 0.42;
-    const luma = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
-
-    if (isLikelySubject && luma > 12 && luma < 244) samples.push(luma);
-  }
-
-  const sorted = samples.length > 80
-    ? samples.sort((a, b) => a - b)
-    : Array.from({ length: data.length / 4 }, (_, pixel) => {
-      const index = pixel * 4;
-      return 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
-    }).filter((luma) => luma > 12 && luma < 244).sort((a, b) => a - b);
-
-  if (sorted.length === 0) return null;
-  const percentile = (amount: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * amount)))];
-  return {
-    shadow: percentile(0.18),
-    midtone: percentile(0.5),
-    highlight: percentile(0.84),
-  };
-}
-
-async function chooseAutoToneSettings(photos: string[]) {
-  const tones = (await Promise.all(photos.map((photo) => analyzePhotoTone(photo)))).filter((tone): tone is NonNullable<typeof tone> => Boolean(tone));
-  if (tones.length === 0) return DEFAULT_SETTINGS;
-
-  const average = (key: keyof (typeof tones)[number]) =>
-    tones.reduce((total, tone) => total + tone[key], 0) / tones.length;
-  const shadow = average("shadow");
-  const midtone = average("midtone");
-  const highlight = average("highlight");
-  const range = Math.max(1, highlight - shadow);
-
-  return {
-    ...DEFAULT_SETTINGS,
-    brightness: Math.round(clamp(112 + (138 - midtone) * 0.28, 95, 132)),
-    contrast: Math.round(clamp(106 + (96 - range) * 0.22, 88, 128)),
-  };
-}
 
 function formatDate() {
   return new Intl.DateTimeFormat("en-GB", {
@@ -258,7 +197,6 @@ export default function Home() {
   const [layoutCount, setLayoutCount] = useState<LayoutCount>(4);
   const [photos, setPhotos] = useState<string[]>([]);
   const [settings, setSettings] = useState<EditSettings>(DEFAULT_SETTINGS);
-  const [autoToneSummary, setAutoToneSummary] = useState("Ready to balance the next photo for thermal paper.");
   const [cameraPhase, setCameraPhase] = useState<CameraPhase>("loading");
   const [cameraError, setCameraError] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -385,9 +323,6 @@ export default function Home() {
         setFlash(false);
         if (photoIndex < layoutCount - 1) await wait(430);
       }
-      const autoSettings = await chooseAutoToneSettings(captures);
-      setSettings(autoSettings);
-      setAutoToneSummary(`Auto set brightness ${autoSettings.brightness}% and contrast ${autoSettings.contrast}% for this photo.`);
       stopCamera();
       setScreen("preview");
     } catch (error) {
@@ -421,9 +356,6 @@ export default function Home() {
       return canvas.toDataURL("image/png");
     });
     setPhotos(demoPhotos);
-    const autoSettings = await chooseAutoToneSettings(demoPhotos);
-    setSettings(autoSettings);
-    setAutoToneSummary(`Auto set brightness ${autoSettings.brightness}% and contrast ${autoSettings.contrast}% for this photo.`);
     setScreen("preview");
   };
 
@@ -432,7 +364,6 @@ export default function Home() {
     sequenceRunningRef.current = false;
     setPhotos([]);
     setSettings(DEFAULT_SETTINGS);
-    setAutoToneSummary("Ready to balance the next photo for thermal paper.");
     setPrintError("");
     setScreen("welcome");
   };
@@ -600,8 +531,8 @@ export default function Home() {
 
             <div className="editor-group">
               <h2><SlidersHorizontal size={19} /> Image</h2>
-              <span className="auto-light-badge"><Sparkles size={15} /> Auto print tone on</span>
-              <p className="auto-light-copy">{autoToneSummary} Bright backgrounds are kept close to paper-white before printing.</p>
+              <span className="auto-light-badge"><Sparkles size={15} /> Auto lighting on</span>
+              <p className="auto-light-copy">Shadows and skin tones are balanced automatically for black-and-white thermal paper.</p>
               <details className="advanced-controls">
                 <summary>Optional manual adjustments</summary>
                 <div>
