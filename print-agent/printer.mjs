@@ -8,7 +8,7 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
-export const PRINT_TONE_PROFILE = "face-detail-paper";
+export const PRINT_TONE_PROFILE = "clean-portrait-paper";
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -146,25 +146,37 @@ export function autoToneGrayscale(grayscale) {
     if (value <= blackPoint) return Math.max(0, Math.round(value * 0.35));
     if (value >= paperPoint) return 255;
     const normalized = (value - blackPoint) / (paperPoint - blackPoint);
-    return Math.round(45 + 210 * Math.pow(normalized, shadowLift));
+    const lifted = Math.round(45 + 210 * Math.pow(normalized, shadowLift));
+    if (value >= 205 && lifted >= 210) return 255;
+    if (lifted >= 232) return 255;
+    return lifted;
   }));
 }
 
 export function ditherGrayscale(grayscale, width, height) {
   const working = Float32Array.from(grayscale);
   const output = Buffer.alloc(grayscale.length);
+  const spread = [
+    [1, 0],
+    [2, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+    [0, 2],
+  ];
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const index = y * width + x;
       const oldValue = Math.max(0, Math.min(255, working[index]));
       const newValue = oldValue < 150 ? 0 : 255;
       output[index] = newValue;
-      const error = oldValue - newValue;
-      if (x + 1 < width) working[index + 1] += error * (7 / 16);
-      if (y + 1 < height) {
-        if (x > 0) working[index + width - 1] += error * (3 / 16);
-        working[index + width] += error * (5 / 16);
-        if (x + 1 < width) working[index + width + 1] += error * (1 / 16);
+      const error = (oldValue - newValue) / 8;
+      for (const [deltaX, deltaY] of spread) {
+        const nextX = x + deltaX;
+        const nextY = y + deltaY;
+        if (nextX >= 0 && nextX < width && nextY < height) {
+          working[nextY * width + nextX] += error;
+        }
       }
     }
   }

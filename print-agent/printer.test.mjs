@@ -77,6 +77,12 @@ test("dithering turns a dark midtone into printable detail instead of a solid bl
   assert.ok(dithered.includes(255));
 });
 
+test("cleans light backgrounds to paper white before dithering", () => {
+  const wall = Buffer.from([206, 210, 216, 224, 230, 245, 255]);
+  const corrected = autoToneGrayscale(wall);
+  assert.ok(corrected.subarray(1).every((value) => value === 255), `expected light wall tones to become paper white, received ${[...corrected]}`);
+});
+
 test("keeps a dark face on a bright receipt from printing as a black mass", () => {
   const width = 32;
   const height = 32;
