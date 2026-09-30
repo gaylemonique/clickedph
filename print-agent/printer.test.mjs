@@ -183,3 +183,40 @@ test("paper-white cleanup prevents bright backgrounds from dithering into visibl
   assert.ok(backgroundInkRatio < 0.004, `expected bright background to stay paper white, received ${backgroundInkRatio}`);
   assert.ok(faceInkRatio > 0.12, `expected face detail to remain printable, received ${faceInkRatio}`);
 });
+
+test("paper-white cleanup suppresses light gray wall texture behind portraits", () => {
+  const width = 64;
+  const height = 76;
+  const grayscale = [];
+  const lightWall = [];
+  const faceArea = [];
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = (x - 32) / 24;
+      const dy = (y - 34) / 30;
+      const radius = Math.sqrt(dx * dx + dy * dy);
+      const isFaceArea = radius < 0.82 && y > 15 && y < 62;
+      const isHair = y < 31 && Math.abs(x - 32) < 21;
+      let value = 214;
+
+      if (isFaceArea) value = 103 + Math.round(42 * (1 - Math.min(radius, 0.82) / 0.82));
+      if (isHair) value = 38;
+
+      grayscale.push(value);
+      lightWall.push(!isFaceArea && !isHair);
+      faceArea.push(isFaceArea);
+    }
+  }
+
+  const dithered = ditherGrayscale(preservePaperWhite(autoToneGrayscale(Buffer.from(grayscale))), width, height);
+  const wallInkRatio = dithered.reduce((blackPixels, value, index) => {
+    return blackPixels + (lightWall[index] && value === 0 ? 1 : 0);
+  }, 0) / lightWall.filter(Boolean).length;
+  const faceInkRatio = dithered.reduce((blackPixels, value, index) => {
+    return blackPixels + (faceArea[index] && value === 0 ? 1 : 0);
+  }, 0) / faceArea.filter(Boolean).length;
+
+  assert.ok(wallInkRatio < 0.04, `expected light wall texture to be suppressed, received ${wallInkRatio}`);
+  assert.ok(faceInkRatio > 0.12, `expected face detail to remain printable, received ${faceInkRatio}`);
+});

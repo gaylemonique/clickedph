@@ -8,8 +8,8 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
-export const PRINT_TONE_PROFILE = "photo-safe-v3";
-const PAPER_WHITE_CUTOFF = 248;
+export const PRINT_TONE_PROFILE = "photo-safe-v4";
+const PAPER_WHITE_CUTOFF = 232;
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -184,13 +184,15 @@ export function ditherGrayscale(grayscale, width, height) {
       const oldValue = Math.max(0, Math.min(255, working[index]));
       const newValue = oldValue < 150 ? 0 : 255;
       output[index] = newValue;
-      const error = oldValue - newValue;
-      if (x + 1 < width) working[index + 1] += error * (7 / 16);
+      const error = (oldValue - newValue) / 8;
+      if (x + 1 < width) working[index + 1] += error;
+      if (x + 2 < width) working[index + 2] += error;
       if (y + 1 < height) {
-        if (x > 0) working[index + width - 1] += error * (3 / 16);
-        working[index + width] += error * (5 / 16);
-        if (x + 1 < width) working[index + width + 1] += error * (1 / 16);
+        if (x > 0) working[index + width - 1] += error;
+        working[index + width] += error;
+        if (x + 1 < width) working[index + width + 1] += error;
       }
+      if (y + 2 < height) working[index + width * 2] += error;
     }
   }
   return output;
