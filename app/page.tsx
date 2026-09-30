@@ -338,6 +338,8 @@ export default function Home() {
   const [uploadError, setUploadError] = useState("");
   const [lightingStatus, setLightingStatus] = useState<LightingStatus>(DEFAULT_LIGHTING_STATUS);
   const [printerConnection, setPrinterConnection] = useState<{ status: "checking" | "ready" | "offline"; name?: string }>({ status: "checking" });
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -373,6 +375,14 @@ export default function Home() {
     };
   }, []);
 
+  const refreshCameraDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter((device) => device.kind === "videoinput");
+    setCameraDevices(videoInputs);
+    setSelectedCameraId((current) => current || videoInputs[0]?.deviceId || "");
+  }, []);
+
   useEffect(() => {
     if (screen !== "camera" || (cameraPhase !== "ready" && cameraPhase !== "countdown")) return undefined;
     let active = true;
@@ -388,7 +398,7 @@ export default function Home() {
     };
   }, [cameraPhase, screen]);
 
-  const openCamera = useCallback(async () => {
+  const openCamera = useCallback(async (deviceIdOverride = selectedCameraId) => {
     stopCamera();
     setCameraPhase("loading");
     setCameraError("");
@@ -397,8 +407,11 @@ export default function Home() {
         throw new Error("This browser does not support camera access.");
       }
       let requestExpired = false;
+      const videoConstraints: MediaTrackConstraints = deviceIdOverride
+        ? { deviceId: { exact: deviceIdOverride }, width: { ideal: 1280 }, height: { ideal: 960 } }
+        : { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } };
       const cameraRequest = navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+        video: videoConstraints,
         audio: false,
       });
       cameraRequest.then((lateStream) => {
@@ -418,6 +431,7 @@ export default function Home() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      await refreshCameraDevices();
       setCameraPhase("ready");
     } catch (error) {
       const message = error instanceof DOMException && error.name === "NotAllowedError"
@@ -428,7 +442,15 @@ export default function Home() {
       setCameraError(message);
       setCameraPhase("error");
     }
-  }, [stopCamera]);
+  }, [refreshCameraDevices, selectedCameraId, stopCamera]);
+
+  const changeCamera = (deviceId: string) => {
+    setSelectedCameraId(deviceId);
+    if (screen === "camera") {
+      setCameraPhase("loading");
+      window.setTimeout(() => void openCamera(deviceId), 0);
+    }
+  };
 
   const goToCamera = () => {
     setUploadError("");
@@ -683,6 +705,18 @@ export default function Home() {
                 </span>
               ))}
             </div>
+            {cameraDevices.length > 0 && (
+              <label className="camera-device-picker">
+                <span>Camera source</span>
+                <select value={selectedCameraId} onChange={(event) => changeCamera(event.target.value)}>
+                  {cameraDevices.map((device, index) => (
+                    <option key={device.deviceId || index} value={device.deviceId}>
+                      {device.label || `Camera ${index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           <div className="viewfinder-wrap">
             <div className={`viewfinder ${flash ? "is-flashing" : ""}`}>
@@ -713,7 +747,7 @@ export default function Home() {
               {cameraPhase === "countdown" && <div className="hold-still"><Camera size={20} /> Next shot is automatic</div>}
               {cameraPhase === "error" && (
                 <div className="error-actions">
-                  <button className="secondary-button" onClick={openCamera}>Try camera again</button>
+                  <button className="secondary-button" onClick={() => void openCamera()}>Try camera again</button>
                   <button className="secondary-button" onClick={openImagePicker}><Upload size={18} /> Upload image</button>
                   <button className="text-button light" onClick={useDemoPhotos}>Use demo photos</button>
                 </div>

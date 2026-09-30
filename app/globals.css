@@ -521,6 +521,35 @@ input:focus-visible {
 .shot-track .is-current { border-color: var(--honey); color: var(--honey); }
 .shot-track .is-captured { background: var(--honey); border-color: var(--honey); color: var(--black); }
 
+.camera-device-picker {
+  width: min(430px, 100%);
+  margin-top: 18px;
+  display: grid;
+  gap: 7px;
+  color: oklch(0.85 0.025 255);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.camera-device-picker select {
+  min-height: 44px;
+  width: 100%;
+  border: 2px solid oklch(1 0 0 / 0.35);
+  border-radius: 10px;
+  background: oklch(1 0 0 / 0.1);
+  color: var(--white);
+  padding: 8px 10px;
+  font-weight: 900;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.camera-device-picker option {
+  color: var(--ink);
+}
+
 .viewfinder-wrap { min-width: 0; }
 .viewfinder {
   aspect-ratio: 4 / 3;
