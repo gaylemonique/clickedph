@@ -8,7 +8,8 @@ const VIRTUAL_PATTERN = /(?:Microsoft|OneNote|Fax|PDF|XPS|DeskJet|LaserJet|Offic
 const KNOWN_USB_DEVICES = [
   { vendorId: "0483", productId: "5743", name: "Printer POS-58 / JK-5802H" },
 ];
-export const PRINT_TONE_PROFILE = "photo-safe-v2";
+export const PRINT_TONE_PROFILE = "photo-safe-v3";
+const PAPER_WHITE_CUTOFF = 248;
 
 const usbPrintScript = path.resolve("print-agent/windows-usb-print.ps1");
 
@@ -170,6 +171,10 @@ export function autoToneGrayscale(grayscale) {
   }));
 }
 
+export function preservePaperWhite(grayscale) {
+  return Buffer.from(Uint8Array.from(grayscale, (value) => value >= PAPER_WHITE_CUTOFF ? 255 : value));
+}
+
 export function ditherGrayscale(grayscale, width, height) {
   const working = Float32Array.from(grayscale);
   const output = Buffer.alloc(grayscale.length);
@@ -198,7 +203,7 @@ export async function pngToEscPos(pngBuffer) {
     .grayscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  const corrected = autoToneGrayscale(data);
+  const corrected = preservePaperWhite(autoToneGrayscale(data));
   const dithered = ditherGrayscale(corrected, info.width, info.height);
   const raster = buildEscPosRaster(dithered, info.width, info.height);
   return Buffer.concat([
