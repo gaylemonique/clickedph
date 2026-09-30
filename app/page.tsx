@@ -139,6 +139,14 @@ function analyzeLighting(video: HTMLVideoElement): LightingStatus {
     + readRegionAverage(data, width, 22, 0, 74, 14)
   ) / 3;
 
+  if (face > 188 || subject.average > 205) {
+    return {
+      state: "dim",
+      face: Math.round(Math.min(face, subject.average)),
+      background: Math.round(background),
+      message: "Center your face. The camera is reading bright wall, not face detail.",
+    };
+  }
   if (subject.darkRatio < 0.08 && subject.detail < 18) {
     return {
       state: "dim",
@@ -602,7 +610,7 @@ export default function Home() {
             <h1>{cameraPhase === "countdown" ? "Keep posing!" : "Step into frame."}</h1>
             <p>{cameraPhase === "countdown" ? `Taking photo ${shotNumber} of ${layoutCount}. We’ll handle the rest.` : "Look at the lens. Your preview is mirrored, just like a real booth."}</p>
             <div className={`lighting-meter is-${lightingStatus.state}`} role="status" aria-live="polite">
-              <span><i /> {lightingStatus.state === "good" ? "Good face light" : lightingStatus.state === "backlit" ? "Backlit face" : lightingStatus.state === "dim" ? "Face too dim" : "Checking light"}</span>
+              <span><i /> {lightingStatus.state === "good" ? "Good face light" : lightingStatus.state === "backlit" ? "Backlit face" : lightingStatus.state === "dim" ? "Check face position" : "Checking light"}</span>
               <b>{lightingStatus.message}</b>
               <small>Face {lightingStatus.face} / Background {lightingStatus.background}</small>
             </div>
