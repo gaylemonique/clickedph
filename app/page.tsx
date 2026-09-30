@@ -24,6 +24,12 @@ import { resolvePrintAgentUrl } from "./print-agent-url";
 type Screen = "welcome" | "layout" | "camera" | "preview" | "printing" | "complete";
 type LayoutCount = 1 | 2 | 4 | 6;
 type CameraPhase = "loading" | "ready" | "countdown" | "error";
+type LightingStatus = {
+  state: "checking" | "good" | "dim" | "backlit";
+  face: number;
+  background: number;
+  message: string;
+};
 
 type EditSettings = {
   brightness: number;
@@ -49,6 +55,13 @@ const PRINT_AGENT_HEALTH_URL = PRINT_AGENT_URL.replace(/\/print\/?$/, "/health")
 const wait = (milliseconds: number) =>
   new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
 
+const DEFAULT_LIGHTING_STATUS: LightingStatus = {
+  state: "checking",
+  face: 0,
+  background: 0,
+  message: "Checking face light...",
+};
+
 const loadImage = (source: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
@@ -65,6 +78,61 @@ function formatDate() {
   })
     .format(new Date())
     .toUpperCase();
+}
+
+function readRegionAverage(data: Uint8ClampedArray, width: number, xStart: number, yStart: number, xEnd: number, yEnd: number) {
+  let total = 0;
+  let count = 0;
+  for (let y = yStart; y < yEnd; y += 1) {
+    for (let x = xStart; x < xEnd; x += 1) {
+      const index = (y * width + x) * 4;
+      total += 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
+      count += 1;
+    }
+  }
+  return count === 0 ? 0 : total / count;
+}
+
+function analyzeLighting(video: HTMLVideoElement): LightingStatus {
+  const width = 96;
+  const height = 72;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context || video.videoWidth === 0) return DEFAULT_LIGHTING_STATUS;
+
+  context.drawImage(video, 0, 0, width, height);
+  const { data } = context.getImageData(0, 0, width, height);
+  const face = readRegionAverage(data, width, 32, 16, 64, 52);
+  const background = (
+    readRegionAverage(data, width, 0, 0, 22, height)
+    + readRegionAverage(data, width, 74, 0, width, height)
+    + readRegionAverage(data, width, 22, 0, 74, 14)
+  ) / 3;
+
+  if (face < 92) {
+    return {
+      state: "dim",
+      face: Math.round(face),
+      background: Math.round(background),
+      message: "Add front light or move closer.",
+    };
+  }
+  if (background - face > 48) {
+    return {
+      state: "backlit",
+      face: Math.round(face),
+      background: Math.round(background),
+      message: "Turn away from the bright wall or light your face.",
+    };
+  }
+  return {
+    state: "good",
+    face: Math.round(face),
+    background: Math.round(background),
+    message: "Face light looks printable.",
+  };
 }
 
 function drawCover(
@@ -203,6 +271,7 @@ export default function Home() {
   const [shotNumber, setShotNumber] = useState(1);
   const [flash, setFlash] = useState(false);
   const [printError, setPrintError] = useState("");
+  const [lightingStatus, setLightingStatus] = useState<LightingStatus>(DEFAULT_LIGHTING_STATUS);
   const [printerConnection, setPrinterConnection] = useState<{ status: "checking" | "ready" | "offline"; name?: string }>({ status: "checking" });
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -237,6 +306,21 @@ export default function Home() {
       window.clearInterval(poll);
     };
   }, []);
+
+  useEffect(() => {
+    if (screen !== "camera" || (cameraPhase !== "ready" && cameraPhase !== "countdown")) return undefined;
+    let active = true;
+    const sampleLighting = () => {
+      const video = videoRef.current;
+      if (active && video) setLightingStatus(analyzeLighting(video));
+    };
+    sampleLighting();
+    const poll = window.setInterval(sampleLighting, 450);
+    return () => {
+      active = false;
+      window.clearInterval(poll);
+    };
+  }, [cameraPhase, screen]);
 
   const openCamera = useCallback(async () => {
     stopCamera();
@@ -282,6 +366,7 @@ export default function Home() {
 
   const goToCamera = () => {
     setCameraPhase("loading");
+    setLightingStatus(DEFAULT_LIGHTING_STATUS);
     setScreen("camera");
     window.setTimeout(() => void openCamera(), 0);
   };
@@ -472,6 +557,11 @@ export default function Home() {
             <span className="step-label">{layoutCount}-photo sequence</span>
             <h1>{cameraPhase === "countdown" ? "Keep posing!" : "Step into frame."}</h1>
             <p>{cameraPhase === "countdown" ? `Taking photo ${shotNumber} of ${layoutCount}. We’ll handle the rest.` : "Look at the lens. Your preview is mirrored, just like a real booth."}</p>
+            <div className={`lighting-meter is-${lightingStatus.state}`} role="status" aria-live="polite">
+              <span><i /> {lightingStatus.state === "good" ? "Good face light" : lightingStatus.state === "backlit" ? "Backlit face" : lightingStatus.state === "dim" ? "Face too dim" : "Checking light"}</span>
+              <b>{lightingStatus.message}</b>
+              <small>Face {lightingStatus.face} / Background {lightingStatus.background}</small>
+            </div>
             <div className="shot-track" aria-label={`${photos.length} of ${layoutCount} photos captured`}>
               {Array.from({ length: layoutCount }, (_, index) => (
                 <span key={index} className={index < photos.length ? "is-captured" : index === shotNumber - 1 && cameraPhase === "countdown" ? "is-current" : ""}>

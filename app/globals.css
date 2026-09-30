@@ -435,6 +435,42 @@ input:focus-visible {
 .camera-copy .step-label { color: var(--honey); margin-bottom: 16px; }
 .camera-copy p { color: oklch(0.80 0.025 255); margin-left: 0; max-width: 42ch; }
 
+.lighting-meter {
+  width: min(430px, 100%);
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 2px solid oklch(1 0 0 / 0.25);
+  border-radius: 10px;
+  background: oklch(1 0 0 / 0.08);
+  display: grid;
+  gap: 5px;
+}
+
+.lighting-meter span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.77rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lighting-meter i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--honey);
+  box-shadow: 0 0 0 4px oklch(0.74 0.14 77 / 0.22);
+}
+
+.lighting-meter b { font-size: 0.95rem; }
+.lighting-meter small { color: oklch(0.82 0.02 255); font-weight: 800; }
+.lighting-meter.is-good { border-color: oklch(0.74 0.12 152); background: oklch(0.74 0.12 152 / 0.12); }
+.lighting-meter.is-good i { background: var(--success); box-shadow: 0 0 0 4px oklch(0.74 0.12 152 / 0.22); }
+.lighting-meter.is-dim,
+.lighting-meter.is-backlit { border-color: var(--honey); background: oklch(0.74 0.14 77 / 0.12); }
+
 .shot-track { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 32px; }
 .shot-track span {
   width: 40px;
@@ -581,6 +617,7 @@ input:focus-visible {
   .camera-screen { grid-template-columns: 1fr; align-content: start; overflow-y: auto; }
   .camera-copy { text-align: center; }
   .camera-copy p { margin-left: auto; }
+  .lighting-meter { margin-inline: auto; text-align: left; }
   .shot-track { justify-content: center; margin-top: 20px; }
   .viewfinder { width: min(720px, 100%); max-height: none; }
   .preview-screen { grid-template-columns: 1fr 380px; }
