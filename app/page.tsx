@@ -16,9 +16,10 @@ import {
   SlidersHorizontal,
   Sparkles,
   Type,
+  Upload,
   WifiOff,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { resolvePrintAgentUrl } from "./print-agent-url";
 
 type Screen = "welcome" | "layout" | "camera" | "preview" | "printing" | "complete";
@@ -68,6 +69,17 @@ const loadImage = (source: string) =>
     image.onload = () => resolve(image);
     image.onerror = reject;
     image.src = source;
+  });
+
+const readImageFile = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("The selected image could not be read."));
+    };
+    reader.onerror = () => reject(new Error("The selected image could not be read."));
+    reader.readAsDataURL(file);
   });
 
 function formatDate() {
@@ -323,8 +335,10 @@ export default function Home() {
   const [shotNumber, setShotNumber] = useState(1);
   const [flash, setFlash] = useState(false);
   const [printError, setPrintError] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const [lightingStatus, setLightingStatus] = useState<LightingStatus>(DEFAULT_LIGHTING_STATUS);
   const [printerConnection, setPrinterConnection] = useState<{ status: "checking" | "ready" | "offline"; name?: string }>({ status: "checking" });
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sequenceRunningRef = useRef(false);
@@ -417,10 +431,36 @@ export default function Home() {
   }, [stopCamera]);
 
   const goToCamera = () => {
+    setUploadError("");
     setCameraPhase("loading");
     setLightingStatus(DEFAULT_LIGHTING_STATUS);
     setScreen("camera");
     window.setTimeout(() => void openCamera(), 0);
+  };
+
+  const openImagePicker = () => {
+    setUploadError("");
+    fileInputRef.current?.click();
+  };
+
+  const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("image/"));
+    event.target.value = "";
+    if (selectedFiles.length === 0) return;
+    try {
+      const selectedImages = selectedFiles.slice(0, 6);
+      const uploadedPhotos = await Promise.all(selectedImages.map(readImageFile));
+      const nextLayout: LayoutCount = uploadedPhotos.length <= 1 ? 1 : uploadedPhotos.length <= 2 ? 2 : uploadedPhotos.length <= 4 ? 4 : 6;
+      stopCamera();
+      sequenceRunningRef.current = false;
+      setLayoutCount(nextLayout);
+      setPhotos(uploadedPhotos);
+      setPrintError("");
+      setUploadError("");
+      setScreen("preview");
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "The selected image could not be opened.");
+    }
   };
 
   const captureFrame = useCallback(() => {
@@ -473,6 +513,7 @@ export default function Home() {
   };
 
   const useDemoPhotos = async () => {
+    setUploadError("");
     const demoPhotos = Array.from({ length: layoutCount }, (_, index) => {
       const canvas = document.createElement("canvas");
       canvas.width = 900;
@@ -502,6 +543,7 @@ export default function Home() {
     setPhotos([]);
     setSettings(DEFAULT_SETTINGS);
     setPrintError("");
+    setUploadError("");
     setScreen("welcome");
   };
 
@@ -527,6 +569,14 @@ export default function Home() {
 
   return (
     <main className={`app app-${screen}`}>
+      <input
+        ref={fileInputRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleImageUpload}
+      />
       <header className="topbar">
         <button className="wordmark" onClick={startOver} aria-label="Return to start">
           <Aperture size={25} strokeWidth={2.6} />
@@ -548,9 +598,15 @@ export default function Home() {
             <span className="welcome-tag"><Sparkles size={16} /> Instant thermal keepsake</span>
             <h1>MAKE A<br /><em>MOMENT</em><br />YOU CAN HOLD.</h1>
             <p>Pick a strip, strike a pose, and print your photos on a tiny 58mm receipt.</p>
-            <button className="primary-button hero-button" disabled={printerConnection.status !== "ready"} onClick={() => setScreen("layout")}>
-              {printerConnection.status === "ready" ? "Start taking photos" : printerConnection.status === "checking" ? "Finding printer…" : "Waiting for printer access"} <ArrowRight size={22} />
-            </button>
+            <div className="welcome-actions">
+              <button className="primary-button hero-button" disabled={printerConnection.status !== "ready"} onClick={() => setScreen("layout")}>
+                {printerConnection.status === "ready" ? "Start taking photos" : printerConnection.status === "checking" ? "Finding printer…" : "Waiting for printer access"} <ArrowRight size={22} />
+              </button>
+              <button className="secondary-button hero-upload-button" onClick={openImagePicker}>
+                <Upload size={20} /> Upload image
+              </button>
+            </div>
+            {uploadError && <p className="upload-error" role="alert">{uploadError}</p>}
             {printerConnection.status === "offline" && <p className="printer-guidance" role="status">Allow “Local Network Access” in the browser, then make sure the Clicked! print agent and POS-58 printer are on. Detection retries automatically.</p>}
             <div className="welcome-details" aria-label="How it works">
               <span><b>01</b> Choose</span><span><b>02</b> Pose</span><span><b>03</b> Print</span>
@@ -596,10 +652,16 @@ export default function Home() {
           </div>
           <div className="screen-actions split-actions">
             <button className="secondary-button" onClick={() => setScreen("welcome")}><ArrowLeft size={19} /> Back</button>
-            <button className="primary-button" onClick={goToCamera}>
-              Open camera <Camera size={20} />
-            </button>
+            <div className="action-cluster">
+              <button className="secondary-button" onClick={openImagePicker}>
+                <Upload size={19} /> Upload image
+              </button>
+              <button className="primary-button" onClick={goToCamera}>
+                Open camera <Camera size={20} />
+              </button>
+            </div>
           </div>
+          {uploadError && <p className="upload-error centered" role="alert">{uploadError}</p>}
         </section>
       )}
 
@@ -652,6 +714,7 @@ export default function Home() {
               {cameraPhase === "error" && (
                 <div className="error-actions">
                   <button className="secondary-button" onClick={openCamera}>Try camera again</button>
+                  <button className="secondary-button" onClick={openImagePicker}><Upload size={18} /> Upload image</button>
                   <button className="text-button light" onClick={useDemoPhotos}>Use demo photos</button>
                 </div>
               )}
